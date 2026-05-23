@@ -1,0 +1,20 @@
+{
+  "name": "pi-to-chrome",
+  "version": "0.1.0",
+  "description": "Pi extension for Chrome DevTools inspection",
+  "keywords": ["pi-extension", "chrome", "devtools"],
+  "type": "module",
+  "dependencies": {
+    "puppeteer-core": "^24.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "files": [
+    "index.ts",
+    "tools/"
+  ],
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
