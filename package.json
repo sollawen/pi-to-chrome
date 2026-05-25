@@ -1,10 +1,15 @@
 {
   "name": "pi-to-chrome",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pi extension for Chrome DevTools inspection",
-  "keywords": ["pi-extension", "chrome", "devtools"],
+  "keywords": [
+    "pi-extension",
+    "chrome",
+    "devtools"
+  ],
   "type": "module",
   "dependencies": {
+    "@sinclair/typebox": "^0.34.49",
     "puppeteer-core": "^24.0.0"
   },
   "peerDependencies": {
@@ -12,9 +17,17 @@
   },
   "files": [
     "index.ts",
-    "tools/"
+    "core/",
+    "tools/",
+    "tool-registry.ts",
+    "console-buffer.ts"
   ],
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
   }
 }
