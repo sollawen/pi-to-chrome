@@ -192,7 +192,11 @@ export default async function(pi: ExtensionAPI) {
     try {
       await browser.connectChrome();
       await establishConnection(ctx);
-      ctx.ui.notify('✅ Chrome 已自动重连', 'info');
+      pi.sendMessage({
+        customType: 'chrome-reconnected',
+        content: '✅ Chrome 已自动重连',
+        display: true,
+      });
     } catch (err: any) {
       console.error('[pi-to-chrome] session_start 自动重连失败', err);
       clearConnectionState();
