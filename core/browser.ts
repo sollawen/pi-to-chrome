@@ -87,7 +87,7 @@ export function onDisconnected(cb: () => void): void {
 export function destroyAllCdpSessions(): void {
   for (const [, session] of cdpSessions) {
     try {
-      session.detach();
+      session.detach().catch(() => {});
     } catch (error) {
       // 断线时底层 WebSocket 已关，detach 失败属正常
       console.debug('[pi-to-chrome] destroyAllCdpSessions: detach 失败（可能已断线）', error);
