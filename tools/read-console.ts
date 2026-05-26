@@ -15,10 +15,12 @@ export const readConsoleTool: ToolDefinition<{
 }> = {
   name: 'chrome_read_console',
   label: 'Chrome Read Console',
-  description: 'Read console messages from the page. Filter by level (log/warn/error/info).',
-  promptSnippet: 'Read console messages from the page',
+  description: '读取页面的 console 日志消息，支持按级别过滤（log/warn/error/info）。',
+  promptSnippet: '读取页面的 console 日志',
   promptGuidelines: [
-    'Use chrome_read_console when the user asks about errors, warnings, or log output on the page. Filter by level to focus on errors only.'
+    '【排错时的第一反应】当页面行为异常或功能不工作时，先用 chrome_read_console 查看 error 级别日志，定位 JS 报错。',
+    '用 level 参数过滤：调试 JS 报错用 "error"，查警告用 "warn"，看完整日志用 "all"。',
+    '在修改代码后刷新页面，再用 chrome_read_console 确认错误是否消失。'
   ],
   parameters: Type.Object({
     level: Type.Optional(Type.Union([

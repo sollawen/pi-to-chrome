@@ -89,8 +89,29 @@ export default async function(pi: ExtensionAPI) {
           ctx.ui.notify('✅ Chrome 启动成功', 'info');
         }
 
+        // 注册断线回调（在 startListening/registerTools 之前，消除 race window）
+        browser.onDisconnected(() => {
+          if (toolNames.length === 0) return;
+
+          consoleBuffer.stopListening();
+          const allActive = pi.getActiveTools();
+          const remaining = allActive.filter((name: string) => !toolNames.includes(name));
+          pi.setActiveTools(remaining);
+          toolNames = [];
+
+          pi.sendMessage({
+            customType: 'chrome-disconnected',
+            content: '⚠️ Chrome 连接已断开！\n如需查看原因，请立即切换到 Chrome 查看 console 日志\n如需重新连接，请执行 /chrome-start',
+            display: true,
+          });
+        });
+
         consoleBuffer.startListening(browser.getBrowser());
+
         toolNames = registerTools(pi, consoleBuffer);
+        // 将新注册的工具加入 active tools
+        const currentActive = pi.getActiveTools();
+        pi.setActiveTools([...currentActive, ...toolNames]);
         ctx.ui.notify('✅ Chrome 检查工具已就绪（4 个工具已注册）', 'info');
 
       } catch (err: any) {
@@ -144,6 +165,7 @@ export default async function(pi: ExtensionAPI) {
   // ─── session_shutdown cleanup ───
   pi.on('session_shutdown', async () => {
     if (browser.isConnected()) {
+      toolNames = [];  // 先清空，防止 disconnectChrome 触发断线回调发送误导通知
       consoleBuffer.stopListening();
       await browser.disconnectChrome();
     }

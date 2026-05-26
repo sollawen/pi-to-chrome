@@ -79,7 +79,9 @@ export const takeScreenshotTool: ToolDefinition<{
       if (originalViewport) {
         try {
           await page.setViewport(originalViewport);
-        } catch {}
+        } catch (viewError) {
+          console.error('[pi-to-chrome] take-screenshot: viewport 恢复失败', viewError);
+        }
       }
       throw error;
     }

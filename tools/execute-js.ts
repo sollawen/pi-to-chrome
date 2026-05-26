@@ -10,10 +10,13 @@ import { Type } from '@sinclair/typebox';
 export const executeJsTool: ToolDefinition<{ expression: string }> = {
   name: 'chrome_execute_js',
   label: 'Chrome Execute JS',
-  description: 'Execute JavaScript in the page context. Use to query page state or compute values.',
-  promptSnippet: 'Execute JavaScript in the page context',
+  description: '在页面上下文中执行 JavaScript 表达式，用于查询 DOM 状态、获取计算样式、测量元素尺寸等。',
+  promptSnippet: '在页面上下文中执行 JavaScript',
   promptGuidelines: [
-    'Use chrome_execute_js to query page state, get DOM data, or compute values in the browser. Prefer it over guessing when you need exact page data.'
+    '【获取精确数据的工具】当你需要元素的精确数值（offsetHeight、scrollHeight、getBoundingClientRect、scrollTop 等）时，用 chrome_execute_js 获取，不要猜测。',
+    '调试布局问题时的常用查询：检查 scrollHeight vs clientHeight（判断是否溢出）、遍历父容器链的 overflow/display/height（定位高度约束断裂点）。',
+    '可以用 JSON.stringify() 包裹返回值来获取可读输出。',
+    '注意：代码中不能使用 const/let 等块级声明语句，请用 var 或 IIFE 包裹。例：JSON.stringify((function(){ var x = 1; return x })())'
   ],
   parameters: Type.Object({
     expression: Type.String({ description: 'JavaScript code to execute' })

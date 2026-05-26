@@ -30,6 +30,14 @@ export const DEBUG_PROFILE_DIR = path.join(homedir(), 'Library/Application Suppo
 // ─── Module state ───
 let browser: Browser | null = null;
 
+// ─── 断线回调 ───
+let disconnectedCallback: (() => void) | null = null;
+
+// ─── 健康检查缓存 ───
+let lastHealthCheckTime = 0;
+let lastHealthCheckResult = true;
+const HEALTH_CHECK_TTL_MS = 5000; // 5 秒内有效
+
 // ─── Connection configuration ───
 export function configureConnection(options: {
   mode?: ConnectionMode;
@@ -56,6 +64,34 @@ export function isConnected(): boolean {
 export function getBrowser(): Browser {
   if (!browser) throw new Error('Chrome 未连接，请先执行 /chrome-start');
   return browser;
+}
+
+/** 注册断线回调（由 index.ts 调用，回调中无 pi ctx，只有 pi 可用） */
+export function onDisconnected(cb: () => void): void {
+  disconnectedCallback = cb;
+}
+
+/** 健康检查：确认 browser 连接有效。失败则 throw 明确错误。 */
+export async function ensureConnection(): Promise<void> {
+  if (!browser) {
+    throw new Error('Chrome 连接已断开，请执行 /chrome-start 重连');
+  }
+
+  // 利用缓存避免并发工具调用时重复 CDP 请求
+  const now = Date.now();
+  if (now - lastHealthCheckTime < HEALTH_CHECK_TTL_MS && lastHealthCheckResult) {
+    return;
+  }
+
+  try {
+    await browser.version();
+    lastHealthCheckTime = now;
+    lastHealthCheckResult = true;
+  } catch (error) {
+    lastHealthCheckResult = false;
+    console.error('[pi-to-chrome] ensureConnection: browser.version() 失败', error);
+    throw new Error('Chrome 连接已断开，请执行 /chrome-start 重连');
+  }
 }
 
 // ─── Proxy bypass ───
@@ -91,24 +127,44 @@ export function ensureDebugProfile(): void {
 }
 
 // ─── Page utilities ───
+/** 判断是否为 Chrome 内部页面（非用户页面） */
+function isChromeInternalPage(url: string): boolean {
+  return url.startsWith('chrome://') ||
+    url.startsWith('chrome-search://') ||
+    url.startsWith('chrome-extension://') ||
+    url.startsWith('devtools://');
+}
+
 export async function getActivePage(): Promise<Page> {
   const b = getBrowser();
 
   try {
     const pages = await b.pages();
+
+    // 优先从用户页面中找 visible 的
     for (const page of pages) {
+      if (isChromeInternalPage(page.url())) continue;
       try {
         const visibilityState = await page.evaluate(() => document.visibilityState);
         if (visibilityState === 'visible') {
           return page;
         }
-      } catch {}
+      } catch (error) {
+        console.error(`[pi-to-chrome] getActivePage: page.evaluate() 失败 (url=${page.url()})`, error);
+      }
     }
 
+    // 没有 visible 的用户页面，返回第一个用户页面
+    const userPage = pages.find(p => !isChromeInternalPage(p.url()));
+    if (userPage) return userPage;
+
+    // 兜底：只有内部页面时返回第一个
     if (pages.length > 0) {
       return pages[0];
     }
-  } catch {}
+  } catch (error) {
+    console.error('[pi-to-chrome] getActivePage: b.pages() 失败', error);
+  }
 
   throw new Error('无法获取当前页面');
 }
@@ -173,6 +229,15 @@ export async function waitForChromeReady(timeoutMs: number = 15000): Promise<boo
 export async function connectChrome(): Promise<Browser> {
   const puppeteer = await import('puppeteer-core');
   browser = await puppeteer.connect({ browserURL: getDebugUrl(), defaultViewport: null });
+
+  // 注册断线监听
+  browser.on('disconnected', () => {
+    console.error('[pi-to-chrome] browser disconnected 事件触发');
+    browser = null;                          // 直接置 null，不做任何 CDP 请求
+    lastHealthCheckResult = false;           // 失效化健康检查缓存
+    disconnectedCallback?.();                // 通知 index.ts 做清理和通知
+  });
+
   return browser;
 }
 
@@ -180,7 +245,10 @@ export async function disconnectChrome(): Promise<void> {
   if (browser) {
     try {
       browser.disconnect();
-    } catch {}
+    } catch (error) {
+      console.error('[pi-to-chrome] disconnectChrome: browser.disconnect() 失败', error);
+    }
     browser = null;
+    lastHealthCheckResult = false;
   }
 }

@@ -34,14 +34,20 @@ export class ConsoleBuffer {
       for (const page of pages) {
         this.attachPageListener(page);
       }
-    }).catch(() => {});
+    }).catch((error) => {
+      console.error('[pi-to-chrome] console-buffer: browser.pages() 失败', error);
+    });
 
     // Listen to new pages opened after connection
     browser.on('targetcreated', async (target) => {
       if (target.type() === 'page') {
-        const page = await target.page();
-        if (page) {
-          this.attachPageListener(page);
+        try {
+          const page = await target.page();
+          if (page) {
+            this.attachPageListener(page);
+          }
+        } catch (error) {
+          console.error('[pi-to-chrome] console-buffer: targetcreated page() 失败', error);
         }
       }
     });
@@ -54,7 +60,9 @@ export class ConsoleBuffer {
     for (const { page, handler } of this.listeners) {
       try {
         page.off('console', handler);
-      } catch {}
+      } catch (error) {
+        console.error('[pi-to-chrome] console-buffer: page.off() 失败', error);
+      }
     }
     this.listeners = [];
     this.browser = null;

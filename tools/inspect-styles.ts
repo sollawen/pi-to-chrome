@@ -13,10 +13,13 @@ export const inspectStylesTool: ToolDefinition<{
 }> = {
   name: 'chrome_inspect_styles',
   label: 'Chrome Inspect Styles',
-  description: 'Inspect CSS cascade for an element by selector. Shows matched CSS rules and their sources.',
-  promptSnippet: 'Inspect CSS cascade for an element by selector',
+  description: '查看元素的完整 CSS 样式层叠链：包括 inline style、class 样式、user-agent 样式，以及每条规则的来源文件和优先级。',
+  promptSnippet: '查看元素的 CSS 样式层叠链',
   promptGuidelines: [
-    'Use chrome_inspect_styles when the user asks about why an element looks a certain way — colors, sizes, layout, or which CSS rules apply. Specify the CSS selector of the element.'
+    '【调试布局问题的核心工具】当元素显示异常（溢出、滚动条不出现、尺寸不对、布局错乱）时，立即用 chrome_inspect_styles 检查该元素及其父容器的样式层叠链，确认 inline style 是否覆盖了 CSS 规则、overflow 是否被意外设为 hidden 等。',
+    '调试滚动条问题时：依次检查 滚动容器 → 父容器 → 祖先容器的 overflow、display、height、flex 属性，定位哪一层断了高度约束链。',
+    '返回结果会按优先级排列（inline > CSS class > user-agent），注意 inline style 会覆盖 CSS 文件中的规则。',
+    '指定 CSS selector 来定位元素，例如 "#dashboardContainer"、".command-list"、"div > .card"。'
   ],
   parameters: Type.Object({
     selector: Type.String({ description: 'CSS selector of the element to inspect' }),
@@ -133,7 +136,9 @@ export const inspectStylesTool: ToolDefinition<{
       if (cdpSession) {
         try {
           await cdpSession.detach();
-        } catch {}
+        } catch (error) {
+          console.error('[pi-to-chrome] inspect-styles: cdpSession.detach() 失败', error);
+        }
       }
     }
   }

@@ -8,7 +8,7 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import type { ToolDefinition } from './core/types';
 import type { ConsoleBuffer } from './console-buffer';
-import { getActivePage } from './core/browser';
+import { ensureConnection, getActivePage } from './core/browser';
 
 import { findElementsTool } from './tools/find-elements';
 import { inspectStylesTool } from './tools/inspect-styles';
@@ -36,7 +36,8 @@ export function registerTools(pi: ExtensionAPI, consoleBuffer: ConsoleBuffer): s
       promptGuidelines: tool.promptGuidelines,
       parameters: tool.parameters,
       async execute(toolCallId, params, signal, onUpdate, ctx) {
-        const page = await getActivePage(); // browser check inside
+        await ensureConnection();
+        const page = await getActivePage();
         return tool.execute(page, params, { consoleBuffer });
       }
     });
