@@ -1,6 +1,6 @@
 {
   "name": "pi-to-chrome",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The tinest Pi extension for Chrome — Only 4 tools what you need.",
   "repository": {
     "type": "git",
@@ -10,7 +10,13 @@
     "url": "https://github.com/sollawen/pi-to-chrome/issues"
   },
   "homepage": "https://github.com/sollawen/pi-to-chrome#readme",
-  "keywords": ["pi-extension", "pi-package", "chrome", "devtools", "puppeteer"],
+  "keywords": [
+    "pi-extension",
+    "pi-package",
+    "chrome",
+    "devtools",
+    "puppeteer"
+  ],
   "type": "module",
   "dependencies": {
     "@sinclair/typebox": "^0.34.49",
