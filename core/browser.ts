@@ -36,8 +36,14 @@ let browser: Browser | null = null;
 // Page 对象在连接生命周期内引用不变（Target.page() 有 pagePromise 缓存），可安全用作 Map key。
 const cdpSessions = new Map<Page, CDPSession>();
 
+// ─── CDP Session 互斥锁 ───
+// per-page：同一 page 的 CDP 调用串行，不同 page 互不影响
+// 注：page 通常复用，不会无限增长；若需彻底清理，page close 时可 delete cdpLocks.get(page)
+const cdpLocks = new Map<Page, Promise<void>>();
+
 // ─── 断线回调 ───
 let disconnectedCallback: (() => void) | null = null;
+let isDisconnecting = false;
 
 // ─── 健康检查缓存 ───
 let lastHealthCheckTime = 0;
@@ -120,6 +126,30 @@ export async function getCdpSession(page: Page): Promise<CDPSession> {
 
   cdpSessions.set(page, session);
   return session;
+}
+
+/**
+ * 获取共享 CDP session 并执行回调，同一 page 的调用自动串行。
+ * 所有需要 CDP session 的工具都应通过此函数访问，不要直接调用 getCdpSession()。
+ */
+export async function withCdpSession<T>(
+  page: Page,
+  fn: (session: CDPSession) => Promise<T>
+): Promise<T> {
+  // 排队：等前一个调用完成
+  const prev = cdpLocks.get(page) || Promise.resolve();
+  let release: (() => void) | undefined;
+  const wait = new Promise<void>(r => { release = r; });
+  cdpLocks.set(page, wait);
+  await prev;
+
+  // 执行
+  const session = await getCdpSession(page);
+  try {
+    return await fn(session);
+  } finally {
+    release?.();
+  }
 }
 
 // ─── 健康检查缓存 ───
@@ -284,10 +314,11 @@ export async function connectChrome(): Promise<Browser> {
 
   // 注册断线监听
   browser.on('disconnected', () => {
+    if (isDisconnecting) return;             // 主动断开时跳过，由 disconnectChrome 统一清理
     console.error('[pi-to-chrome] browser disconnected 事件触发');
     browser = null;                          // 直接置 null，不做任何 CDP 请求
     lastHealthCheckResult = false;           // 失效化健康检查缓存
-    destroyAllCdpSessions();                 // ← 新增：清理 CDP sessions
+    destroyAllCdpSessions();                 // 清理 CDP sessions
     disconnectedCallback?.();                // 通知 index.ts 做清理和通知
   });
 
@@ -295,14 +326,16 @@ export async function connectChrome(): Promise<Browser> {
 }
 
 export async function disconnectChrome(): Promise<void> {
-  if (browser) {
-    destroyAllCdpSessions();                 // ← 新增：先清理 CDP sessions
-    try {
-      browser.disconnect();
-    } catch (error) {
-      console.error('[pi-to-chrome] disconnectChrome: browser.disconnect() 失败', error);
-    }
+  if (!browser) return;
+  isDisconnecting = true;
+  try {
+    destroyAllCdpSessions();                 // 先清理 CDP sessions
+    browser.disconnect();
+  } catch {
+    // transport 已断开时 disconnect/detach 可能抛出 TargetCloseError，属正常
+  } finally {
     browser = null;
     lastHealthCheckResult = false;
+    isDisconnecting = false;
   }
 }
