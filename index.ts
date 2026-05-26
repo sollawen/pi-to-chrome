@@ -6,6 +6,7 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 
 import { ConsoleBuffer } from './console-buffer';
 import * as browser from './core/browser';
@@ -16,6 +17,17 @@ export default async function(pi: ExtensionAPI) {
   const consoleBuffer = new ConsoleBuffer();
   let toolNames: string[] = [];
   let isReconnecting = false;
+
+  // ─── Custom message renderers (plain text, no box/background) ───
+  for (const customType of ['chrome-disconnected', 'chrome-reconnected']) {
+    pi.registerMessageRenderer(customType, (message, _options, theme) => {
+      const container = new Container();
+      container.addChild(new Spacer(1));
+      const text = typeof message.content === 'string' ? message.content : message.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n');
+      container.addChild(new Text(theme.fg('dim', text), 1, 0));
+      return container;
+    });
+  }
 
   // ─── Shared: establish connection (register callbacks, tools, notify) ───
   async function establishConnection(ctx: ExtensionContext): Promise<void> {
