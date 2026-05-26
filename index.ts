@@ -5,20 +5,55 @@
  * in a Chrome browser connected via remote debugging port.
  */
 
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 
 import { ConsoleBuffer } from './console-buffer';
 import * as browser from './core/browser';
+import { readConnectionState, writeConnectionState, clearConnectionState, isConnectionStateExpired } from './core/connection-state';
 import { registerTools } from './tool-registry';
 
 export default async function(pi: ExtensionAPI) {
   const consoleBuffer = new ConsoleBuffer();
   let toolNames: string[] = [];
+  let isReconnecting = false;
+
+  // ─── Shared: establish connection (register callbacks, tools, notify) ───
+  async function establishConnection(ctx: ExtensionContext): Promise<void> {
+    // 注册断线回调（在 startListening/registerTools 之前，消除 race window）
+    browser.onDisconnected(() => {
+      if (toolNames.length === 0) return;
+
+      consoleBuffer.stopListening();
+      const allActive = pi.getActiveTools();
+      const remaining = allActive.filter((name: string) => !toolNames.includes(name));
+      pi.setActiveTools(remaining);
+      toolNames = [];
+
+      pi.sendMessage({
+        customType: 'chrome-disconnected',
+        content: '⚠️ Chrome 连接已断开！\n如需查看原因，请立即切换到 Chrome 查看 console 日志\n如需重新连接，请执行 /chrome-start',
+        display: true,
+      });
+    });
+
+    consoleBuffer.startListening(browser.getBrowser());
+
+    toolNames = registerTools(pi, consoleBuffer);
+    const currentActive = pi.getActiveTools();
+    pi.setActiveTools([...currentActive, ...toolNames]);
+    ctx.ui.notify('✅ Chrome 检查工具已就绪（4 个工具已注册）', 'info');
+  }
 
   // ─── /chrome-start ───
   pi.registerCommand('chrome-start', {
     description: '连接 Chrome 浏览器并启用页面检查工具 (--remote 用于 SSH 隧道连接)',
     handler: async (args: any, ctx: any) => {
+      // 并发保护
+      if (isReconnecting) {
+        ctx.ui.notify('⏳ 正在自动重连中，请稍后再试', 'warning');
+        return;
+      }
+
       // Parse args: --remote, --host <value>, --port <value>
       const argStr = typeof args === 'string' ? args : '';
       const argParts = argStr.trim().split(/\s+/);
@@ -63,6 +98,7 @@ export default async function(pi: ExtensionAPI) {
               '2. SSH 隧道已建立（ssh -R 9222:127.0.0.1:9222 ...）',
               'error'
             );
+            clearConnectionState();
             return;
           }
 
@@ -82,6 +118,7 @@ export default async function(pi: ExtensionAPI) {
 
           if (!(await browser.waitForChromeReady())) {
             ctx.ui.notify('Chrome 启动超时，请手动检查', 'error');
+            clearConnectionState();
             return;
           }
 
@@ -89,85 +126,93 @@ export default async function(pi: ExtensionAPI) {
           ctx.ui.notify('✅ Chrome 启动成功', 'info');
         }
 
-        // 注册断线回调（在 startListening/registerTools 之前，消除 race window）
-        browser.onDisconnected(() => {
-          if (toolNames.length === 0) return;
-
-          consoleBuffer.stopListening();
-          const allActive = pi.getActiveTools();
-          const remaining = allActive.filter((name: string) => !toolNames.includes(name));
-          pi.setActiveTools(remaining);
-          toolNames = [];
-
-          pi.sendMessage({
-            customType: 'chrome-disconnected',
-            content: '⚠️ Chrome 连接已断开！\n如需查看原因，请立即切换到 Chrome 查看 console 日志\n如需重新连接，请执行 /chrome-start',
-            display: true,
-          });
+        // 连接成功，写标志文件
+        writeConnectionState({
+          mode: isRemote ? 'remote' : 'local',
+          host: isRemote ? host : '127.0.0.1',
+          port: isRemote ? port : 9222,
         });
 
-        consoleBuffer.startListening(browser.getBrowser());
-
-        toolNames = registerTools(pi, consoleBuffer);
-        // 将新注册的工具加入 active tools
-        const currentActive = pi.getActiveTools();
-        pi.setActiveTools([...currentActive, ...toolNames]);
-        ctx.ui.notify('✅ Chrome 检查工具已就绪（4 个工具已注册）', 'info');
+        await establishConnection(ctx);
 
       } catch (err: any) {
         ctx.ui.notify('❌ 连接失败: ' + err.message, 'error');
+        clearConnectionState();
       }
     }
   });
 
   // ─── /chrome-stop ───
   pi.registerCommand('chrome-stop', {
-    description: '断开 Chrome 连接并关闭浏览器',
+    description: '断开 Chrome 连接（浏览器不关闭）',
     handler: async (args: any, ctx: any) => {
-      const isRemote = browser.getMode() === 'remote';
+      const allActive = pi.getActiveTools();
+      const remaining = allActive.filter((name: string) => !toolNames.includes(name));
+      pi.setActiveTools(remaining);
+      toolNames = [];
 
-      if (isRemote) {
-        // 远程模式：只断开连接，不关闭 Chrome
-        const allActive = pi.getActiveTools();
-        const remaining = allActive.filter((name: string) => !toolNames.includes(name));
-        pi.setActiveTools(remaining);
-        toolNames = [];
+      consoleBuffer.stopListening();
+      await browser.disconnectChrome();
+      clearConnectionState();
 
-        consoleBuffer.stopListening();
-        await browser.disconnectChrome();
-
-        ctx.ui.notify('✅ 已断开远程 Chrome 连接（浏览器未关闭）', 'info');
-      } else {
-        // 本地模式：断开并关闭
-        const ok = await ctx.ui.confirm(
-          '关闭 Chrome？',
-          '将关闭 Chrome 浏览器，是否继续？'
-        );
-        if (!ok) {
-          ctx.ui.notify('已取消', 'warning');
-          return;
-        }
-
-        const allActive = pi.getActiveTools();
-        const remaining = allActive.filter((name: string) => !toolNames.includes(name));
-        pi.setActiveTools(remaining);
-        toolNames = [];
-
-        consoleBuffer.stopListening();
-        await browser.disconnectChrome();
-        await browser.killChrome();
-
-        ctx.ui.notify('✅ Chrome 已断开并关闭', 'info');
-      }
+      ctx.ui.notify('✅ Chrome 已断开连接（浏览器未关闭）', 'info');
     }
   });
 
-  // ─── session_shutdown cleanup ───
-  pi.on('session_shutdown', async () => {
+  // ─── session_start: auto-reconnect ───
+  pi.on('session_start', async (event, ctx) => {
+    if (event.reason === 'startup') return;
+    if (event.reason !== 'new' && event.reason !== 'resume' && event.reason !== 'fork' && event.reason !== 'reload') return;
+
+    const state = readConnectionState();
+    if (!state) return;
+
+    // 检查过期
+    if (isConnectionStateExpired(state)) {
+      clearConnectionState();
+      return;
+    }
+
+    // 恢复连接参数
+    browser.configureConnection({
+      mode: state.mode,
+      host: state.host,
+      port: state.port,
+    });
+
+    // 检查 Chrome 是否可达
+    if (!(await browser.isChromeRunning())) {
+      clearConnectionState();
+      ctx.ui.notify('ℹ️ Chrome 已不可达，未自动重连', 'info');
+      return;
+    }
+
+    // 自动重连
+    isReconnecting = true;
+    try {
+      await browser.connectChrome();
+      await establishConnection(ctx);
+      ctx.ui.notify('✅ Chrome 已自动重连', 'info');
+    } catch (err: any) {
+      console.error('[pi-to-chrome] session_start 自动重连失败', err);
+      clearConnectionState();
+      ctx.ui.notify('ℹ️ Chrome 自动重连失败，连接已清除', 'info');
+    } finally {
+      isReconnecting = false;
+    }
+  });
+
+  // ─── session_shutdown: disconnect + conditional flag cleanup ───
+  pi.on('session_shutdown', async (event) => {
     if (browser.isConnected()) {
       toolNames = [];  // 先清空，防止 disconnectChrome 触发断线回调发送误导通知
       consoleBuffer.stopListening();
       await browser.disconnectChrome();
     }
+
+    if (event.reason === 'quit') {
+      clearConnectionState();
+    }
+    // new / resume / fork / reload → 保留标志文件
   });
 }
