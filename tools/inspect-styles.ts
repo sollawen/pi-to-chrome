@@ -5,6 +5,7 @@
  */
 
 import type { ToolDefinition } from '../core/types';
+import { getCdpSession } from '../core/browser';
 import { Type } from '@sinclair/typebox';
 
 export const inspectStylesTool: ToolDefinition<{
@@ -26,121 +27,102 @@ export const inspectStylesTool: ToolDefinition<{
     includeChildren: Type.Optional(Type.Boolean({ description: 'Include direct children list', default: false }))
   }),
   async execute(page, params) {
-    let cdpSession: any = null;
+    const cdpSession = await getCdpSession(page);
 
-    try {
-      // Create CDP session for this page
-      cdpSession = await page.createCDPSession();
+    // Get document and find node
+    const { root } = await cdpSession.send('DOM.getDocument', { depth: 0 });
+    const { nodeId } = await cdpSession.send('DOM.querySelector', {
+      selector: params.selector,
+      nodeId: root.nodeId
+    });
 
-      // Enable DOM and CSS agents
-      await cdpSession.send('DOM.enable');
-      await cdpSession.send('CSS.enable');
+    if (!nodeId) {
+      throw new Error(`未找到匹配 "${params.selector}" 的元素`);
+    }
 
-      // Get document and find node
-      const { root } = await cdpSession.send('DOM.getDocument', { depth: 0 });
-      const { nodeId } = await cdpSession.send('DOM.querySelector', {
-        selector: params.selector,
-        nodeId: root.nodeId
-      });
+    // Get element info
+    const { node: nodeInfo } = await cdpSession.send('DOM.describeNode', { nodeId });
 
-      if (!nodeId) {
-        throw new Error(`未找到匹配 "${params.selector}" 的元素`);
-      }
+    // Get bounding rect
+    const boundingRect = await page.evaluate((sel: string) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    }, params.selector);
 
-      // Get element info
-      const { node: nodeInfo } = await cdpSession.send('DOM.describeNode', { nodeId });
+    // Get text content (truncated)
+    const textContent = await page.evaluate((sel: string) => {
+      const el = document.querySelector(sel);
+      return (el?.textContent || '').trim().slice(0, 200);
+    }, params.selector);
 
-      // Get bounding rect
-      const boundingRect = await page.evaluate((sel: string) => {
-        const el = document.querySelector(sel);
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return { x: r.x, y: r.y, width: r.width, height: r.height };
-      }, params.selector);
+    // Build element info
+    const elementInfo = {
+      tagName: nodeInfo.localName?.toLowerCase() || 'unknown',
+      text: textContent,
+      classList: nodeInfo.attributes
+        ? extractClasses(nodeInfo.attributes)
+        : [],
+      attributes: nodeInfo.attributes || [],
+      boundingRect
+    };
 
-      // Get text content (truncated)
-      const textContent = await page.evaluate((sel: string) => {
-        const el = document.querySelector(sel);
-        return (el?.textContent || '').trim().slice(0, 200);
-      }, params.selector);
+    // Get matched styles
+    const matchedStyles = await cdpSession.send('CSS.getMatchedStylesForNode', { nodeId });
 
-      // Build element info
-      const elementInfo = {
-        tagName: nodeInfo.localName?.toLowerCase() || 'unknown',
-        text: textContent,
-        classList: nodeInfo.attributes
-          ? extractClasses(nodeInfo.attributes)
-          : [],
-        attributes: nodeInfo.attributes || [],
-        boundingRect
-      };
+    // Process CSS rules
+    const cssRules: any[] = [];
 
-      // Get matched styles
-      const matchedStyles = await cdpSession.send('CSS.getMatchedStylesForNode', { nodeId });
-
-      // Process CSS rules
-      const cssRules: any[] = [];
-
-      // Inline style
-      if (matchedStyles.inlineStyle) {
-        const inlineProps = processStyleProperties(matchedStyles.inlineStyle.cssProperties, matchedStyles.inlineStyle.shorthandEntries);
-        if (Object.keys(inlineProps).length > 0) {
-          cssRules.push({
-            type: 'inline',
-            selector: '<inline style>',
-            source: 'inline style',
-            properties: inlineProps
-          });
-        }
-      }
-
-      // Regular matched rules
-      if (matchedStyles.matchedCSSRules) {
-        for (const rule of matchedStyles.matchedCSSRules) {
-          const props = processStyleProperties(rule.rule.style.cssProperties, rule.rule.style.shorthandEntries);
-
-          // Build source string
-          const source = rule.rule.origin === 'user-agent'
-            ? 'user-agent'
-            : rule.rule.selectorList?.selectors?.map((s: any) => s.value).join(', ') || 'unknown';
-
-          const sourceLocation = rule.rule.sourceURL
-            ? `${rule.rule.sourceURL}:${rule.rule.sourceLine || '?'}`
-            : 'inline';
-
-          cssRules.push({
-            type: rule.rule.origin === 'user-agent' ? 'user-agent' : 'regular',
-            selector: source,
-            source: sourceLocation,
-            properties: props
-          });
-        }
-      }
-
-      // Build summary
-      const summary = `元素 <${elementInfo.tagName}> 的 CSS 层叠链:\n` +
-        cssRules.map((rule, i) =>
-          `  ${i + 1}. [${rule.type}] ${rule.selector}\n     来源: ${rule.source}\n` +
-          (rule.properties.length > 0
-            ? `     属性: ${rule.properties.slice(0, 5).map((p: any) => `${p.name}: ${p.value}${p.important ? ' !important' : ''}`).join(', ')}${rule.properties.length > 5 ? '...' : ''}\n`
-            : '')
-        ).join('');
-
-      return {
-        content: [{ type: 'text', text: summary }],
-        details: { element: elementInfo, cssRules }
-      };
-
-    } finally {
-      // Clean up CDP session
-      if (cdpSession) {
-        try {
-          await cdpSession.detach();
-        } catch (error) {
-          console.error('[pi-to-chrome] inspect-styles: cdpSession.detach() 失败', error);
-        }
+    // Inline style
+    if (matchedStyles.inlineStyle) {
+      const inlineProps = processStyleProperties(matchedStyles.inlineStyle.cssProperties, matchedStyles.inlineStyle.shorthandEntries);
+      if (Object.keys(inlineProps).length > 0) {
+        cssRules.push({
+          type: 'inline',
+          selector: '<inline style>',
+          source: 'inline style',
+          properties: inlineProps
+        });
       }
     }
+
+    // Regular matched rules
+    if (matchedStyles.matchedCSSRules) {
+      for (const rule of matchedStyles.matchedCSSRules) {
+        const props = processStyleProperties(rule.rule.style.cssProperties, rule.rule.style.shorthandEntries);
+
+        // Build source string
+        const source = rule.rule.origin === 'user-agent'
+          ? 'user-agent'
+          : rule.rule.selectorList?.selectors?.map((s: any) => s.value).join(', ') || 'unknown';
+
+        const sourceLocation = (rule.rule as any).sourceURL
+          ? `${(rule.rule as any).sourceURL}:${(rule.rule as any).sourceLine || '?'}`
+          : 'inline';
+
+        cssRules.push({
+          type: rule.rule.origin === 'user-agent' ? 'user-agent' : 'regular',
+          selector: source,
+          source: sourceLocation,
+          properties: props
+        });
+      }
+    }
+
+    // Build summary
+    const summary = `元素 <${elementInfo.tagName}> 的 CSS 层叠链:\n` +
+      cssRules.map((rule, i) =>
+        `  ${i + 1}. [${rule.type}] ${rule.selector}\n     来源: ${rule.source}\n` +
+        (rule.properties.length > 0
+          ? `     属性: ${rule.properties.slice(0, 5).map((p: any) => `${p.name}: ${p.value}${p.important ? ' !important' : ''}`).join(', ')}${rule.properties.length > 5 ? '...' : ''}\n`
+          : '')
+      ).join('');
+
+    return {
+      content: [{ type: 'text', text: summary }],
+      details: { element: elementInfo, cssRules }
+    };
   }
 };
 
