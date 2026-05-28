@@ -3,7 +3,7 @@
  */
 
 import type { Page } from 'puppeteer-core';
-import type { ConsoleBuffer } from '../console-buffer';
+import type { ConsoleBuffer } from './console-buffer';
 import type { TSchema } from '@sinclair/typebox';
 
 // Tool unified return format

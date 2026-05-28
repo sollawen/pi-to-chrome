@@ -5,13 +5,51 @@
  * in a Chrome browser connected via remote debugging port.
  */
 
-import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 
-import { ConsoleBuffer } from './console-buffer';
+import { ConsoleBuffer } from './core/console-buffer';
 import * as browser from './core/browser';
 import { readConnectionState, writeConnectionState, clearConnectionState, isConnectionStateExpired } from './core/connection-state';
-import { registerTools } from './tool-registry';
+import { findElementsTool } from './tools/find-elements';
+import { inspectStylesTool } from './tools/inspect-styles';
+import { readConsoleTool } from './tools/read-console';
+import { executeJsTool } from './tools/execute-js';
+import type { ToolDefinition } from './core/types';
+import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+
+// ─── Tool Registration ───
+
+const ALL_TOOLS: ToolDefinition[] = [
+  findElementsTool,
+  inspectStylesTool,
+  readConsoleTool,
+  executeJsTool,
+];
+
+function registerTools(pi: ExtensionAPI, consoleBuffer: ConsoleBuffer): string[] {
+  const names: string[] = [];
+
+  for (const tool of ALL_TOOLS) {
+    pi.registerTool({
+      name: tool.name,
+      label: tool.label,
+      description: tool.description,
+      promptSnippet: tool.promptSnippet,
+      promptGuidelines: tool.promptGuidelines,
+      parameters: tool.parameters,
+      async execute(toolCallId, params, signal, onUpdate, ctx) {
+        await browser.ensureConnection();
+        const page = await browser.getActivePage();
+        return tool.execute(page, params, { consoleBuffer });
+      }
+    });
+    names.push(tool.name);
+  }
+
+  return names;
+}
+
+// ─── Extension ───
 
 export default async function(pi: ExtensionAPI) {
   const consoleBuffer = new ConsoleBuffer();

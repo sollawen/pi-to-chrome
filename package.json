@@ -29,8 +29,8 @@
     "index.ts",
     "core/",
     "tools/",
-    "tool-registry.ts",
-    "console-buffer.ts"
+    "sh/",
+    "CHANGELOG.md"
   ],
   "pi": {
     "extensions": [
