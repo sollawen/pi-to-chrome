@@ -5,6 +5,7 @@
  */
 
 import type { ToolDefinition } from '../core/types';
+import { withCdpSession } from '../core/browser';
 import { Type } from '@sinclair/typebox';
 
 export const inspectStylesTool: ToolDefinition<{
@@ -26,15 +27,7 @@ export const inspectStylesTool: ToolDefinition<{
     includeChildren: Type.Optional(Type.Boolean({ description: 'Include direct children list', default: false }))
   }),
   async execute(page, params) {
-    let cdpSession: any = null;
-
-    try {
-      // Create CDP session for this page
-      cdpSession = await page.createCDPSession();
-
-      // Enable DOM and CSS agents
-      await cdpSession.send('DOM.enable');
-      await cdpSession.send('CSS.enable');
+    return withCdpSession(page, async (cdpSession) => {
 
       // Get document and find node
       const { root } = await cdpSession.send('DOM.getDocument', { depth: 0 });
@@ -104,8 +97,8 @@ export const inspectStylesTool: ToolDefinition<{
             ? 'user-agent'
             : rule.rule.selectorList?.selectors?.map((s: any) => s.value).join(', ') || 'unknown';
 
-          const sourceLocation = rule.rule.sourceURL
-            ? `${rule.rule.sourceURL}:${rule.rule.sourceLine || '?'}`
+          const sourceLocation = (rule.rule as any).sourceURL
+            ? `${(rule.rule as any).sourceURL}:${(rule.rule as any).sourceLine || '?'}`
             : 'inline';
 
           cssRules.push({
@@ -131,16 +124,7 @@ export const inspectStylesTool: ToolDefinition<{
         details: { element: elementInfo, cssRules }
       };
 
-    } finally {
-      // Clean up CDP session
-      if (cdpSession) {
-        try {
-          await cdpSession.detach();
-        } catch (error) {
-          console.error('[pi-to-chrome] inspect-styles: cdpSession.detach() 失败', error);
-        }
-      }
-    }
+    });
   }
 };
 

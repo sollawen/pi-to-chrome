@@ -8,7 +8,7 @@
  * - Profile management
  */
 
-import type { Browser, Page } from 'puppeteer-core';
+import type { Browser, Page, CDPSession } from 'puppeteer-core';
 import { spawn, execSync } from 'child_process';
 import { existsSync, mkdirSync, symlinkSync } from 'fs';
 import { homedir } from 'os';
@@ -30,8 +30,19 @@ export const DEBUG_PROFILE_DIR = path.join(homedir(), 'Library/Application Suppo
 // ─── Module state ───
 let browser: Browser | null = null;
 
+// ─── CDP Session 池 ───
+// 以 Page 为 key 缓存共享的 CDP session。
+// Page 对象在连接生命周期内引用不变（Target.page() 有 pagePromise 缓存），可安全用作 Map key。
+const cdpSessions = new Map<Page, CDPSession>();
+
+// ─── CDP Session 互斥锁 ───
+// per-page：同一 page 的 CDP 调用串行，不同 page 互不影响
+// 注：page 通常复用，不会无限增长；若需彻底清理，page close 时可 delete cdpLocks.get(page)
+const cdpLocks = new Map<Page, Promise<void>>();
+
 // ─── 断线回调 ───
 let disconnectedCallback: (() => void) | null = null;
+let isDisconnecting = false;
 
 // ─── 健康检查缓存 ───
 let lastHealthCheckTime = 0;
@@ -71,6 +82,78 @@ export function onDisconnected(cb: () => void): void {
   disconnectedCallback = cb;
 }
 
+/** 清理所有 CDP sessions（断线/断开时调用） */
+export function destroyAllCdpSessions(): void {
+  for (const [, session] of cdpSessions) {
+    try {
+      session.detach().catch(() => {});
+    } catch (error) {
+      // 断线时底层 WebSocket 已关，detach 失败属正常
+      console.debug('[pi-to-chrome] destroyAllCdpSessions: detach 失败（可能已断线）', error);
+    }
+  }
+  cdpSessions.clear();
+}
+
+/** 获取 page 对应的共享 CDP session（懒创建，首次调用时建立） */
+export async function getCdpSession(page: Page): Promise<CDPSession> {
+  const existing = cdpSessions.get(page);
+  if (existing && !existing.detached) return existing;
+
+  // 旧 session 已失效，先清理
+  if (existing) cdpSessions.delete(page);
+
+  // 创建新 session 并启用 DOM / CSS agent
+  const session = await page.createCDPSession();
+
+  try {
+    await session.send('DOM.enable');
+    await session.send('CSS.enable');
+  } catch (error) {
+    // agent 启用失败，清理并抛出
+    cdpSessions.delete(page);
+    try { await session.detach(); } catch (detachError) {
+      console.debug('[pi-to-chrome] getCdpSession: enable 失败后 detach 也失败', detachError);
+    }
+    throw error;
+  }
+
+  // session 被关闭时自动从池中移除，下次 getCdpSession 会重建
+  // 动态导入，延迟加载 puppeteer-core（避免启动时 ~110ms 的模块解析开销）
+  const { CDPSessionEvent } = await import('puppeteer-core');
+  session.on(CDPSessionEvent.SessionDetached, () => {
+    cdpSessions.delete(page);
+  });
+
+  cdpSessions.set(page, session);
+  return session;
+}
+
+/**
+ * 获取共享 CDP session 并执行回调，同一 page 的调用自动串行。
+ * 所有需要 CDP session 的工具都应通过此函数访问，不要直接调用 getCdpSession()。
+ */
+export async function withCdpSession<T>(
+  page: Page,
+  fn: (session: CDPSession) => Promise<T>
+): Promise<T> {
+  // 排队：等前一个调用完成
+  const prev = cdpLocks.get(page) || Promise.resolve();
+  let release: (() => void) | undefined;
+  const wait = new Promise<void>(r => { release = r; });
+  cdpLocks.set(page, wait);
+  await prev;
+
+  // 执行
+  const session = await getCdpSession(page);
+  try {
+    return await fn(session);
+  } finally {
+    release?.();
+  }
+}
+
+// ─── 健康检查缓存 ───
 /** 健康检查：确认 browser 连接有效。失败则 throw 明确错误。 */
 export async function ensureConnection(): Promise<void> {
   if (!browser) {
@@ -232,9 +315,11 @@ export async function connectChrome(): Promise<Browser> {
 
   // 注册断线监听
   browser.on('disconnected', () => {
+    if (isDisconnecting) return;             // 主动断开时跳过，由 disconnectChrome 统一清理
     console.error('[pi-to-chrome] browser disconnected 事件触发');
     browser = null;                          // 直接置 null，不做任何 CDP 请求
     lastHealthCheckResult = false;           // 失效化健康检查缓存
+    destroyAllCdpSessions();                 // 清理 CDP sessions
     disconnectedCallback?.();                // 通知 index.ts 做清理和通知
   });
 
@@ -242,13 +327,16 @@ export async function connectChrome(): Promise<Browser> {
 }
 
 export async function disconnectChrome(): Promise<void> {
-  if (browser) {
-    try {
-      browser.disconnect();
-    } catch (error) {
-      console.error('[pi-to-chrome] disconnectChrome: browser.disconnect() 失败', error);
-    }
+  if (!browser) return;
+  isDisconnecting = true;
+  try {
+    destroyAllCdpSessions();                 // 先清理 CDP sessions
+    browser.disconnect();
+  } catch {
+    // transport 已断开时 disconnect/detach 可能抛出 TargetCloseError，属正常
+  } finally {
     browser = null;
     lastHealthCheckResult = false;
+    isDisconnecting = false;
   }
 }

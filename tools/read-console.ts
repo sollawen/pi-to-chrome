@@ -7,7 +7,7 @@
 
 import type { ToolDefinition, ToolDeps } from '../core/types';
 import { Type } from '@sinclair/typebox';
-import type { ConsoleLevel } from '../console-buffer';
+import type { ConsoleLevel } from '../core/console-buffer';
 
 export const readConsoleTool: ToolDefinition<{
   level?: ConsoleLevel | 'all';

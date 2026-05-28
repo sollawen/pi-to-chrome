@@ -1,7 +1,7 @@
 {
   "name": "pi-to-chrome",
   "version": "0.1.2",
-  "description": "The tinest Pi extension for Chrome — Only 4 tools what you need.",
+  "description": "The tiniest Pi extension for Chrome — Only 4 tools what you need.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sollawen/pi-to-chrome.git"
@@ -29,8 +29,8 @@
     "index.ts",
     "core/",
     "tools/",
-    "tool-registry.ts",
-    "console-buffer.ts"
+    "sh/",
+    "CHANGELOG.md"
   ],
   "pi": {
     "extensions": [
