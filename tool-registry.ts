@@ -12,14 +12,12 @@ import { ensureConnection, getActivePage } from './core/browser';
 
 import { findElementsTool } from './tools/find-elements';
 import { inspectStylesTool } from './tools/inspect-styles';
-// import { takeScreenshotTool } from './tools/take-screenshot';
 import { readConsoleTool } from './tools/read-console';
 import { executeJsTool } from './tools/execute-js';
 
 const ALL_TOOLS: ToolDefinition[] = [
   findElementsTool,
   inspectStylesTool,
-  // takeScreenshotTool,
   readConsoleTool,
   executeJsTool,
 ];

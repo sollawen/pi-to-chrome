@@ -1,8 +1,12 @@
 # pi-to-chrome
 
+## What's new?
+
+When developing on a Linux server with Chrome running on your Mac, you can use `/chrome-start --remote` in pi on server to connect and control that Chrome.
+
 ## Why?
 
-I've used Claude and OpenCode for frontend development for a long time. Their MCP integrations for Chrome — built on Playwright and the like — feel like starships: massive, feature-bloated, 90% of which I never use. And they burn through tokens like there's no tomorrow.
+I've used Claude and OpenCode for frontend development for a long time. Their MCP integrations for Chrome — built on Playwright and the like — feel like a starship: massive, feature-bloated, 90% of which I never use. And they burn through tokens like there's no tomorrow.
 
 It frustrated me.
 
@@ -12,7 +16,7 @@ Inspired and led by Pi's philosophy, I built **pi-to-chrome** for myself. The ex
 
 The world went quiet, quickly, and clean.
 
----
+
 
 ## Only 4 tools
 
@@ -26,8 +30,22 @@ The world went quiet, quickly, and clean.
 - `/chrome-start` — launch a Chrome instance (or connect to one already running), enable this toolbox
 - `/chrome-stop` — closes the browser, and disable this toolbox
 
+### How to work remotely?
 
----
+When Chrome is running on your Mac but you want to control it from pi on a Linux server:
+
+1. Copy the `sh/` directory (containing two shell scripts) to your Mac.
+2. On your Mac:
+   - First, run `./start-chrome.sh` to launch Chrome with the remote debugging port enabled.
+   - Then, run `./start-tunnel.sh` (or `./start-tunnel.sh user@your-server` if the server address is different). This establishes an SSH reverse tunnel, forwarding Chrome's remote debugging port (9222) to your server. 
+   - You can edit "start-tunnel.sh" to set your default server so you don't need to specify it every time.
+3. On the server, run `/chrome-start --remote`. Pi will connect to Chrome on your Mac through the tunnel.
+4. Session resume/fork/reload will automatically reconnect.
+5. Run `/chrome-stop` in pi to disconnect (Chrome stays open on your Mac).
+
+More details in [remote-operation-guide.md](sh/remote-operation-guide.md).
+
+
 
 ## Install
 
@@ -35,7 +53,7 @@ The world went quiet, quickly, and clean.
 pi install npm:pi-to-chrome
 ```
 
----
+
 
 
 ## Requirements
@@ -45,6 +63,6 @@ pi install npm:pi-to-chrome
 
 ---
 
-### Sollawen
+*Sollawen*
 
 email: sollawen@163.com
