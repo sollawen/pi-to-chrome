@@ -9,7 +9,6 @@
  */
 
 import type { Browser, Page, CDPSession } from 'puppeteer-core';
-import { CDPSessionEvent } from 'puppeteer-core';
 import { spawn, execSync } from 'child_process';
 import { existsSync, mkdirSync, symlinkSync } from 'fs';
 import { homedir } from 'os';
@@ -120,6 +119,8 @@ export async function getCdpSession(page: Page): Promise<CDPSession> {
   }
 
   // session 被关闭时自动从池中移除，下次 getCdpSession 会重建
+  // 动态导入，延迟加载 puppeteer-core（避免启动时 ~110ms 的模块解析开销）
+  const { CDPSessionEvent } = await import('puppeteer-core');
   session.on(CDPSessionEvent.SessionDetached, () => {
     cdpSessions.delete(page);
   });
