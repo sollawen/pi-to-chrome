@@ -11,9 +11,11 @@ import { ConsoleBuffer } from './core/console-buffer';
 import * as browser from './core/browser';
 import { readConnectionState, writeConnectionState, clearConnectionState, isConnectionStateExpired } from './core/connection-state';
 import { findElementsTool } from './tools/find-elements';
-import { inspectStylesTool } from './tools/inspect-styles';
+import { traceCssTool } from './tools/trace-css';
+import { showDomTreeTool } from './tools/show-dom-tree';
 import { readConsoleTool } from './tools/read-console';
 import { executeJsTool } from './tools/execute-js';
+import { checkLayoutTool } from './tools/check-layout';
 import type { ToolDefinition } from './core/types';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 
@@ -21,9 +23,11 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 
 const ALL_TOOLS: ToolDefinition[] = [
   findElementsTool,
-  inspectStylesTool,
+  showDomTreeTool,
+  traceCssTool,
   readConsoleTool,
   executeJsTool,
+  checkLayoutTool,
 ];
 
 function registerTools(pi: ExtensionAPI, consoleBuffer: ConsoleBuffer): string[] {
@@ -91,7 +95,7 @@ export default async function(pi: ExtensionAPI) {
     toolNames = registerTools(pi, consoleBuffer);
     const currentActive = pi.getActiveTools();
     pi.setActiveTools([...currentActive, ...toolNames]);
-    ctx.ui.notify('✅ Chrome 检查工具已就绪（4 个工具已注册）', 'info');
+    ctx.ui.notify('✅ Chrome 检查工具已就绪（6 个工具已注册）', 'info');
   }
 
   // ─── /chrome-start ───

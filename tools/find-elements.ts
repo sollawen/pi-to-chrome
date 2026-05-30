@@ -15,12 +15,13 @@ export const findElementsTool: ToolDefinition<{ text: string }> = {
   name: 'chrome_find_elements',
   label: 'Chrome Find Elements',
   description: '搜索当前页面上的元素。关键词同时匹配文本、class、id、标签名等，智能排序返回最相关的结果。',
-  promptSnippet: '按关键词搜索页面元素',
+  promptSnippet: '定位元素的 CSS selector',
   promptGuidelines: [
-    '【定位元素的第一步】当你需要调试页面问题时，先用 chrome_find_elements 找到目标元素的 CSS selector，再用 chrome_inspect_styles 查看它的样式层叠链。',
+    '【定位元素的第一步】当你需要调试页面问题时，先用 chrome_find_elements 找到目标元素的 CSS selector，再用 chrome_trace_css 查样式来源、chrome_show_dom_tree 查结构、chrome_check_layout 查布局。',
     'text 参数用 / 分隔中英文关键词，尽量多给变体。例：「灯泡」→ "灯泡/lamp/bulb/light"',
     '拆成小词提高命中：「命令卡片列表」→ "命令卡片/命令/卡片/list/card/command"',
-    '返回的 selector 可直接用于 chrome_inspect_styles 和 chrome_execute_js。'
+    '返回的 selector 可直接传给 chrome_trace_css / chrome_show_dom_tree / chrome_check_layout。',
+    '如果返回了多个结果，挑选目标元素对应的 selector 使用。'
   ],
   parameters: Type.Object({
     text: Type.String({
@@ -327,7 +328,29 @@ export const findElementsTool: ToolDefinition<{ text: string }> = {
       DEBUG
     );
 
-    const summary = `找到 ${results.length} 个匹配「${params.text}」的元素`;
+    const summaryLines = [`找到 ${results.length} 个匹配「${params.text}」的元素:`, ''];
+
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+
+      // 标签描述: <tag.class1.class2#id>
+      let label = `<${r.tag}`;
+      if (r.classes.length > 0) {
+        label += '.' + r.classes.slice(0, 3).join('.');
+      }
+      if (r.id) {
+        label += '#' + r.id;
+      }
+      label += '>';
+
+      // 文本内容（截断 40 字符）
+      const text = r.text ? ` "${r.text.slice(0, 40)}"` : '';
+
+      summaryLines.push(`${i + 1}. ${label}${text}`);
+      summaryLines.push(`   selector: ${r.selector}`);
+    }
+
+    const summary = summaryLines.join('\n');
 
     return {
       content: [{ type: 'text', text: summary }],

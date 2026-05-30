@@ -2,8 +2,8 @@
 
 ## What's new?
 
-When developing on a Linux server with Chrome running on your Mac, you can use `/chrome-start --remote` in pi on server to connect and control that Chrome.
-
+The inspection tool suite got a complete rewrite — four tools updated, including a tree-view DOM explorer, a layout debugger, and a CSS tracer that actually pinpoints stylesheet files. Now they are more smart.
+   
 ## Why?
 
 I've used Claude and OpenCode for frontend development for a long time. Their MCP integrations for Chrome — built on Playwright and the like — feel like a starship: massive, feature-bloated, 90% of which I never use. And they burn through tokens like there's no tomorrow.
@@ -12,18 +12,20 @@ It frustrated me.
 
 Suddenly I found Pi. Its simplicity, elegance, restraint — so refreshing. Just 4 essential tools. That's it. That's all you need.
 
-Inspired and led by Pi's philosophy, I built **pi-to-chrome** for myself. The exact 4 tools I actually use. No more, no less.
+Inspired and led by Pi's philosophy, I built **pi-to-chrome** for myself. The exact 6 tools I actually use. No more, no less.
 
 The world went quiet, quickly, and clean.
 
 
 
-## Only 4 tools
+## Only 6 tools
 
-1. **find_elements** — Searching a jungle of hundreds of components and DOM nodes for the "Select Date" button? Use this to search the whole page and returns the element's id, className, and the full DOM hierarchy.
-2. **inspect_styles** — When a CSS rule sneaks in from nowhere and ruins your layout, use this to dump every style definition — inherited, computed, cascading — for the LLM to untangle.
-3. **read_console** — Chrome's console log is too tiny to read. Hundreds of entries and you still can't find what you want. Use this to stream all logs to the LLM for analysis.
-4. **execute_js** — Throw any JavaScript at Chrome. Execute it, get results back, debug on the fly.
+1. **find_elements** — Searching a jungle of hundreds of components and DOM nodes for the "Select Date" button? Use this to search the whole page and returns the element's id, className, and the full DOM hierarchy. Summary now shows `<tag.class#id>`, text snippet, and directly usable selector.
+2. **trace_css** — When a CSS rule sneaks in from nowhere and ruins your layout, use this to trace the exact stylesheet file and line — no more guessing where it came from.
+3. **show_dom_tree** — Need to understand the DOM structure at a glance? Display the subtree as a tree with connectors, detect shadow roots, and truncate long sibling lists.
+4. **check_layout** — Layout broken? Check element dimensions and layout properties, trace up the ancestor chain to find the height constraint or flex issue causing it.
+5. **read_console** — Chrome's console log is too tiny to read. Hundreds of entries and you still can't find what you want. Use this to stream all logs to the LLM for analysis.
+6. **execute_js** — Throw any JavaScript at Chrome. Execute it, get results back, debug on the fly.
 
 ## Only 2 commands
 
