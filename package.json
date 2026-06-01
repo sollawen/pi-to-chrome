@@ -27,7 +27,9 @@
   },
   "files": [
     "index.ts",
+    "commands/",
     "core/",
+    "scripts/",
     "tools/",
     "sh/",
     "CHANGELOG.md"
