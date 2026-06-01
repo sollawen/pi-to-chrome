@@ -44,6 +44,13 @@ export class ConsoleBuffer {
         try {
           const page = await target.page();
           if (page) {
+            // 清除 puppeteer 默认的 800×600 viewport override
+            try {
+              const client = await page.createCDPSession();
+              await client.send('Emulation.clearDeviceMetricsOverride');
+            } catch (e) {
+              // 忽略清除失败（页面可能已关闭）
+            }
             this.attachPageListener(page);
           }
         } catch (error) {

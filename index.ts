@@ -12,47 +12,15 @@ import { readConnectionState, writeConnectionState, clearConnectionState, isConn
 import { getToolNames, setToolNames, getConsoleBuffer, setReconnecting } from './core/shared-state';
 import { registerChromeStart } from './commands/chrome-start';
 import { registerChromeStop } from './commands/chrome-stop';
-import { findElementsTool } from './tools/find-elements';
-import { traceCssTool } from './tools/trace-css';
-import { showDomTreeTool } from './tools/show-dom-tree';
-import { readConsoleTool } from './tools/read-console';
-import { executeJsTool } from './tools/execute-js';
-import { checkLayoutTool } from './tools/check-layout';
+import { registerChromeInspectTool } from './tools/chrome-inspect';
 import type { ToolDefinition } from './core/types';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 
 // ─── Tool Registration ───
 
-const ALL_TOOLS: ToolDefinition[] = [
-  findElementsTool,
-  showDomTreeTool,
-  traceCssTool,
-  readConsoleTool,
-  executeJsTool,
-  checkLayoutTool,
-];
-
 function registerTools(pi: ExtensionAPI, consoleBuffer: any): string[] {
-  const names: string[] = [];
-
-  for (const tool of ALL_TOOLS) {
-    pi.registerTool({
-      name: tool.name,
-      label: tool.label,
-      description: tool.description,
-      promptSnippet: tool.promptSnippet,
-      promptGuidelines: tool.promptGuidelines,
-      parameters: tool.parameters,
-      async execute(toolCallId, params, signal, onUpdate, ctx) {
-        await browser.ensureConnection();
-        const page = await browser.getActivePage();
-        return tool.execute(page, params, { consoleBuffer });
-      }
-    });
-    names.push(tool.name);
-  }
-
-  return names;
+  registerChromeInspectTool(pi, consoleBuffer);
+  return ['chrome_inspect'];
 }
 
 // ─── Extension ───
@@ -93,7 +61,7 @@ export default async function(pi: ExtensionAPI) {
     setToolNames(registerTools(pi, getConsoleBuffer()));
     const currentActive = pi.getActiveTools();
     pi.setActiveTools([...currentActive, ...getToolNames()]);
-    ctx.ui.notify('✅ Chrome 检查工具已就绪（6 个工具已注册）', 'info');
+    ctx.ui.notify('✅ Chrome 检查工具已就绪（1 个工具已注册）', 'info');
   }
 
   // ─── Register slash commands ───
