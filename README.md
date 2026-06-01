@@ -2,7 +2,7 @@
 
 ## What's new?
 
-The inspection tool suite got a complete rewrite — four tools updated, including a tree-view DOM explorer, a layout debugger, and a CSS tracer that actually pinpoints stylesheet files. Now they are more smart.
+The inspection tool suite got a complete rewrite — Onli 1 tool but including a tree-view DOM explorer, a layout debugger, and a CSS tracer that actually pinpoints stylesheet files. Now they are more smart.
    
 ## Why?
 
