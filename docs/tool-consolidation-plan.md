@@ -32,22 +32,30 @@
 ```
 项目根目录/
 ├── index.ts              # 入口，连接管理，工具注册
-├── commands/              # 斜杠命令
+├── commands/              # 斜杠命令（已完成）
 │   ├── chrome-start.ts
 │   └── chrome-stop.ts
-├── core/                  # 核心功能（已有）
+├── core/                  # 核心功能
 │   ├── browser.ts
 │   ├── console-buffer.ts
 │   ├── connection-state.ts
-│   └── selector-utils.ts
-├── tools/                 # 所有 tools 程序
-│   ├── chrome-inspect.ts  # 合并后的单一 tool
-│   └── scripts/           # JS 脚本（可独立在浏览器控制台运行）
-│       ├── find-elements.js
-│       ├── trace-css.js
-│       ├── show-dom-tree.js
-│       ├── execute-js.js
-│       └── check-layout.js
+│   ├── selector-utils.ts
+│   ├── shared-state.ts
+│   └── types.ts
+├── tools/                 # 待合并：6 → 1
+│   ├── find-elements.ts
+│   ├── trace-css.ts
+│   ├── show-dom-tree.ts
+│   ├── read-console.ts
+│   ├── execute-js.ts
+│   ├── check-layout.ts
+│   └── chrome-inspect.ts  # 合并目标（新增）
+├── scripts/               # JS 脚本（新增，从 tools/ 提取）
+│   ├── find-elements.js
+│   ├── trace-css.js
+│   ├── show-dom-tree.js
+│   ├── execute-js.js
+│   └── check-layout.js
 └── docs/
 ```
 
@@ -55,24 +63,17 @@
 
 ## 核心设计
 
-### index.ts
+### index.ts 合并后改动
+
+将 6 个 tool import 替换为单一 `registerChromeInspectTool`：
 
 ```typescript
 import { registerChromeInspectTool } from './tools/chrome-inspect';
 
-export default async function(pi) {
-  const consoleBuffer = new ConsoleBuffer();
-  
-  // 注册单一 tool
-  registerChromeInspectTool(pi, consoleBuffer);
-  
-  // 注册斜杠命令
-  pi.registerCommand('chrome-start', { ... });
-  pi.registerCommand('chrome-stop', { ... });
-  
-  // ...
-}
+// 在 establishConnection 中调用：
+registerChromeInspectTool(pi, consoleBuffer);
 ```
+其余（commands、session 事件等）不变。
 
 ### tools/chrome-inspect.ts
 
@@ -80,7 +81,18 @@ export default async function(pi) {
 import { Type } from 'typebox';
 import { loadScript } from '../core/script-loader';
 import { formatConsoleMessages } from '../core/formatters';
-import type { ConsoleLevel } from '../core/console-buffer';
+import type { BufferedConsoleMessage } from '../core/console-buffer';
+
+// ─── IIFE wrapper（从 execute-js.ts 迁移）──────────────────────────────────
+// 表达式 → (() => expr)()，语句 → (() => { stmts })()
+function wrapJsExpression(code: string): string {
+  const trimmed = code.trim();
+  const statementKeywords = ['return ', 'const ', 'let ', 'var ', 'if ', 'for ', 'while ', 'try ', 'switch ', 'throw ', 'function ', 'class ', 'async '];
+  const isBlock = trimmed.startsWith('{') || statementKeywords.some(kw => trimmed.startsWith(kw));
+  return isBlock
+    ? `(() => { ${code} })()`
+    : `(() => ${code})()`;
+}
 
 export function registerChromeInspectTool(pi, consoleBuffer) {
   pi.registerTool({
@@ -89,52 +101,63 @@ export function registerChromeInspectTool(pi, consoleBuffer) {
     description: 'Chrome 页面检查工具：搜索元素、追踪CSS、查看DOM、读取console、执行JS、检查布局',
     
     promptGuidelines: [
-      // ===== 搜索元素 =====
-      'Use chrome_inspect with action="find_elements" to search for elements by text keywords. Match against text, class, id, tag name simultaneously.',
+      // ===== 通用 =====
+      '先用 action="find_elements" 找到目标元素的 selector，再用 trace_css / show_dom_tree / check_layout 操作。',
+      
+      // ===== find_elements =====
+      'Use action="find_elements" to search for elements by text keywords. Match against text, class, id, tag name simultaneously.',
       'text 参数用 / 分隔中英文关键词，尽量多给变体。例：「灯泡」→ "灯泡/lamp/bulb/light"',
       '拆成小词提高命中：「命令卡片列表」→ "命令卡片/命令/卡片/list/card/command"',
-      '返回的 selector 可直接传给 trace_css / show_dom_tree / check_layout。',
       
-      // ===== 追踪 CSS =====
-      'Use chrome_inspect with action="trace_css" to trace CSS style sources for an element.',
-      '先用 find_elements 定位元素，再用 trace_css 追踪样式来源。',
+      // ===== trace_css =====
+      'Use action="trace_css" to trace CSS style sources for an element.',
       '返回结果按优先级排列（inline > CSS class > user-agent）。',
       
-      // ===== 查看 DOM 树 =====
-      'Use chrome_inspect with action="show_dom_tree" to view DOM subtree structure.',
+      // ===== show_dom_tree =====
+      'Use action="show_dom_tree" to view DOM subtree structure.',
       '返回树状图展示嵌套关系、标签名、class、id 和文本内容。',
       
-      // ===== 读取 Console =====
-      'Use chrome_inspect with action="read_console" to read console messages from the buffer.',
+      // ===== read_console =====
+      'Use action="read_console" to read console messages from the buffer.',
       '排错时的第一反应：action="read_console", level="error" 查看 JS 报错。',
       'level 参数：debug/log/warn/error/info/all，limit 默认 50。',
       
-      // ===== 执行 JS =====
-      'Use chrome_inspect with action="execute_js" to execute JavaScript in page context.',
+      // ===== execute_js =====
+      'Use action="execute_js" to execute JavaScript in page context.',
       '获取精确数据：offsetHeight、scrollHeight、getBoundingClientRect、scrollTop 等。',
-      '代码中不能使用 const/let，请用 var 或 IIFE 包裹。',
+      '代码中不能使用 const/let，请用 var 或 IIFE 包裹。例：JSON.stringify((function(){ var x = 1; return x })())',
       
-      // ===== 检查布局 =====
-      'Use chrome_inspect with action="check_layout" to check layout issues for an element.',
+      // ===== check_layout =====
+      'Use action="check_layout" to check layout issues for an element.',
       '检测 overflow、z-index、position、flex/grid 等布局相关属性。',
+      '默认沿祖先链向上查 5 层，ancestors 参数可调整（0 跳过）。',
     ],
     
     parameters: Type.Object({
-      action: StringEnum([
-        'find_elements',
-        'trace_css', 
-        'show_dom_tree',
-        'read_console',
-        'execute_js',
-        'check_layout'
-      ] as const),
+      action: Type.Union([
+        Type.Literal('find_elements'),
+        Type.Literal('trace_css'), 
+        Type.Literal('show_dom_tree'),
+        Type.Literal('read_console'),
+        Type.Literal('execute_js'),
+        Type.Literal('check_layout')
+      ]),
       
-      // 通用参数（某些 action 会用到）
-      text: Type.Optional(Type.String()),
-      selector: Type.Optional(Type.String()),
-      expression: Type.Optional(Type.String()),
+      // find_elements
+      text: Type.Optional(Type.String({ description: '搜索关键词，/ 分隔' })),
+      debug: Type.Optional(Type.Boolean({ default: false, description: 'find_elements 调试模式' })),
+      
+      // trace_css / show_dom_tree / check_layout
+      selector: Type.Optional(Type.String({ description: 'CSS selector' })),
+      
+      // show_dom_tree
+      depth: Type.Optional(Type.Number({ minimum: 1, maximum: 10, default: 3 })),
+      
+      // check_layout
+      ancestors: Type.Optional(Type.Number({ minimum: 0, maximum: 20, default: 5 })),
+      
+      // read_console
       level: Type.Optional(Type.Union([
-        Type.Literal('debug'),
         Type.Literal('log'),
         Type.Literal('warn'),
         Type.Literal('error'),
@@ -142,7 +165,9 @@ export function registerChromeInspectTool(pi, consoleBuffer) {
         Type.Literal('all')
       ])),
       limit: Type.Optional(Type.Number({ minimum: 1, maximum: 500, default: 50 })),
-      depth: Type.Optional(Type.Number({ minimum: 1, maximum: 10, default: 3 })),
+      
+      // execute_js
+      expression: Type.Optional(Type.String({ description: 'JavaScript code' })),
     }),
     
     async execute(toolCallId, params, signal, onUpdate, ctx) {
@@ -150,38 +175,50 @@ export function registerChromeInspectTool(pi, consoleBuffer) {
       const page = await browser.getActivePage();
       
       switch (params.action) {
-        case 'find_elements':
-          const findScript = await loadScript('find-elements.js');
-          return page.evaluate(findScript, {
+        case 'find_elements': {
+          const script = await loadScript('find-elements.js');
+          return page.evaluate(script, {
             keywords: params.text?.split('/').map(k => k.trim()).filter(k => k),
-            debug: false
+            debug: params.debug ?? false
           });
+        }
         
-        case 'trace_css':
-          const traceScript = await loadScript('trace-css.js');
-          return page.evaluate(traceScript, { selector: params.selector });
+        case 'trace_css': {
+          const script = await loadScript('trace-css.js');
+          return page.evaluate(script, { selector: params.selector });
+        }
         
-        case 'show_dom_tree':
-          const treeScript = await loadScript('show-dom-tree.js');
-          return page.evaluate(treeScript, { 
+        case 'show_dom_tree': {
+          const script = await loadScript('show-dom-tree.js');
+          return page.evaluate(script, { 
             selector: params.selector,
             depth: params.depth ?? 3 
           });
+        }
         
-        case 'read_console':
+        case 'read_console': {
           // 特殊处理：读 ConsoleBuffer，不走 page.evaluate
-          const level = (params.level || 'all') as ConsoleLevel | 'all';
+          const level = params.level ?? 'all';
           const limit = params.limit ?? 50;
           const messages = consoleBuffer.getMessages(level, limit);
           return formatConsoleMessages(messages, consoleBuffer.count);
+        }
         
-        case 'execute_js':
+        case 'execute_js': {
           const wrappedCode = wrapJsExpression(params.expression);
           return page.evaluate(wrappedCode);
+        }
         
-        case 'check_layout':
-          const layoutScript = await loadScript('check-layout.js');
-          return page.evaluate(layoutScript, { selector: params.selector });
+        case 'check_layout': {
+          const script = await loadScript('check-layout.js');
+          return page.evaluate(script, { 
+            selector: params.selector,
+            ancestors: params.ancestors ?? 5
+          });
+        }
+        
+        default:
+          throw new Error(`[chrome_inspect] Unknown action: ${params.action}`);
       }
     }
   });
@@ -192,8 +229,10 @@ export function registerChromeInspectTool(pi, consoleBuffer) {
 
 ```typescript
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const scriptCache = new Map<string, string>();
 
 export async function loadScript(name: string): Promise<string> {
@@ -201,17 +240,23 @@ export async function loadScript(name: string): Promise<string> {
     return scriptCache.get(name)!;
   }
   
-  const path = resolve(import.meta.dirname, '../tools/scripts', name);
-  const content = await readFile(path, 'utf-8');
-  scriptCache.set(name, content);
-  return content;
+  const path = resolve(__dirname, '../scripts', name);
+  try {
+    const content = await readFile(path, 'utf-8');
+    scriptCache.set(name, content);
+    return content;
+  } catch {
+    throw new Error(`[chrome_inspect] Script not found: ${name}`);
+  }
 }
 ```
 
 ### core/formatters.ts
 
 ```typescript
-export function formatConsoleMessages(messages: ConsoleMessage[], totalCount: number) {
+import type { BufferedConsoleMessage } from './console-buffer';
+
+export function formatConsoleMessages(messages: BufferedConsoleMessage[], totalCount: number) {
   const typeEmoji: Record<string, string> = {
     debug: '🔍',
     log: '📝',
@@ -242,29 +287,13 @@ export function formatConsoleMessages(messages: ConsoleMessage[], totalCount: nu
 }
 ```
 
-### commands/chrome-start.ts
-
-```typescript
-export function registerChromeStartCommand(pi, { consoleBuffer }) {
-  pi.registerCommand('chrome-start', {
-    description: '连接 Chrome 浏览器并启用页面检查工具',
-    async handler(args, ctx) {
-      // 连接 Chrome...
-      // 建立连接后注册 tool
-      registerChromeInspectTool(pi, consoleBuffer);
-      pi.setActiveTools(['chrome_inspect']);
-    }
-  });
-}
-```
-
 ---
 
 ## 实现步骤
 
 ### Phase 1: 创建 JS 脚本
 
-1. 创建 `tools/scripts/` 目录
+1. 创建 `scripts/` 目录（已存在，当前为空）
 2. 从现有 tool 文件中提取 JS 逻辑，保存为独立 `.js` 文件
 3. 确保每个脚本可以独立在浏览器控制台运行
 
@@ -279,11 +308,7 @@ export function registerChromeStartCommand(pi, { consoleBuffer }) {
 2. 实现 action 分发逻辑
 3. 实现 read_console 特殊处理
 
-### Phase 4: 拆分命令
-
-1. 创建 `commands/chrome-start.ts`
-2. 创建 `commands/chrome-stop.ts`
-3. 更新 `index.ts` 的 import 和调用
+### Phase 4: 拆分命令 ✅ 已完成
 
 ### Phase 5: 测试
 
@@ -303,14 +328,9 @@ export function registerChromeStartCommand(pi, { consoleBuffer }) {
 
 ### execute_js 的 wrapper 逻辑
 
-原有的 `chrome_execute_js` 有 IIFE wrapper 逻辑：
-
-```javascript
-// 如果是表达式：(() => expression)()
-// 如果是语句：(() => { statements })()
-```
-
-这个逻辑需要保留在主 tool 里。
+已包含在 `chrome-inspect.ts` 的 `wrapJsExpression()` 函数中。逻辑从 `execute-js.ts` 直接迁移：
+- 表达式 → `(() => expr)()`
+- 语句（以 `{` 或语句关键字开头）→ `(() => { stmts })()`
 
 ### read_console 不走 page.evaluate
 
@@ -324,3 +344,7 @@ JS 脚本应该：
 - 函数签名自包含
 
 这样可以直接复制到浏览器控制台运行调试。
+
+### trace-css.js 的 el.matches() 安全
+
+提取脚本时须保留原有 try/catch：`el.matches(rule.selectorText)` 对某些 CSS 选择器（如 vendor-prefixed pseudo）会抛异常，需静默跳过。
