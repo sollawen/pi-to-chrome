@@ -31,8 +31,9 @@ The single `chrome_inspect` tool does everything — 6 actions for your inspecti
 
 ## Only 2 commands
 
-- `/chrome-start` — launch a Chrome instance (or connect to one already running), enable this toolbox
-- `/chrome-stop` — closes the browser, and disable this toolbox
+### If pi and Chrome are running on same local computer:
+- `/chrome-start` — launch a local Chrome automatically (or connect to one already running), enable this toolbox
+- `/chrome-stop` — closes the local browser, and disable this toolbox
 
 ### How to work remotely?
 
