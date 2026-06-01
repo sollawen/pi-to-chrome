@@ -12,13 +12,15 @@ It frustrated me.
 
 Suddenly I found Pi. Its simplicity, elegance, restraint — so refreshing. Just 4 essential tools. That's it. That's all you need.
 
-Inspired and led by Pi's philosophy, I built **pi-to-chrome** for myself. The exact 6 tools I actually use. No more, no less.
+Inspired by Pi's philosophy, I built **pi-to-chrome** for myself. 6 most-used functions, combined into one tool. Minimalist. Token-efficient. Nothing more, nothing less.
 
 The world went quiet, quickly, and clean.
 
 
 
-## Only 6 tools
+## Only 1 tool, 6 actions
+
+The single `chrome_inspect` tool does everything — 6 actions for your inspection needs:
 
 1. **find_elements** — Searching a jungle of hundreds of components and DOM nodes for the "Select Date" button? Use this to search the whole page and returns the element's id, className, and the full DOM hierarchy. Summary now shows `<tag.class#id>`, text snippet, and directly usable selector.
 2. **trace_css** — When a CSS rule sneaks in from nowhere and ruins your layout, use this to trace the exact stylesheet file and line — no more guessing where it came from.

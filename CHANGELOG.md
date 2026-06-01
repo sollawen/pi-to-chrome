@@ -1,3 +1,24 @@
+## v0.3.1 Tool Consolidation — One inspect tool with multiple actions
+
+### Breaking Change
+
+- **4 tools merged into 1**: `chrome_inspect` now handles all inspection actions via the `action` parameter
+  - `chrome_find_elements` → `chrome_inspect action="find_elements"`
+  - `chrome_trace_css` → `chrome_inspect action="trace_css"`
+  - `chrome_show_dom_tree` → `chrome_inspect action="show_dom_tree"`
+  - `chrome_check_layout` → `chrome_inspect action="check_layout"`
+  - Legacy `read_console` and `execute_js` actions retained
+  - **Migration**: update prompts that reference the old 4 tool names
+
+### Infrastructure
+
+- Added `core/shared-state.ts` — cross-module shared state for connection info
+- Added `tools/chrome-inspect.ts` — consolidated tool implementation with shared selector validation
+- Added `scripts/` — standalone JS scripts for trace-css / find-elements / show-dom-tree / check-layout (for quick testing outside of pi)
+- Consolidated `index.ts` from 260+ lines to a cleaner structure with early exit for non-startup events
+
+---
+
 ## v0.3.0 v3 Tool Suite — trace_css / show_dom_tree / check_layout
 
 Complete rewrite of the inspection tool suite. Four tools added, replaced, or improved.
