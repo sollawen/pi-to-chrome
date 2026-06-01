@@ -177,23 +177,29 @@ export function registerChromeInspectTool(pi, consoleBuffer) {
       switch (params.action) {
         case 'find_elements': {
           const script = await loadScript('find-elements.js');
-          return page.evaluate(script, {
-            keywords: params.text?.split('/').map(k => k.trim()).filter(k => k),
-            debug: params.debug ?? false
-          });
+          await page.evaluate(script);  // Step 1: 定义函数
+          return page.evaluate(
+            (p) => findElements(p),     // Step 2: 函数模式调用
+            { text: params.text }
+          );
         }
         
         case 'trace_css': {
           const script = await loadScript('trace-css.js');
-          return page.evaluate(script, { selector: params.selector });
+          await page.evaluate(script);
+          return page.evaluate(
+            (p) => traceCss(p),
+            { selector: params.selector }
+          );
         }
         
         case 'show_dom_tree': {
           const script = await loadScript('show-dom-tree.js');
-          return page.evaluate(script, { 
-            selector: params.selector,
-            depth: params.depth ?? 3 
-          });
+          await page.evaluate(script);
+          return page.evaluate(
+            (p) => showDomTree(p),
+            { selector: params.selector, depth: params.depth ?? 3 }
+          );
         }
         
         case 'read_console': {
@@ -211,10 +217,11 @@ export function registerChromeInspectTool(pi, consoleBuffer) {
         
         case 'check_layout': {
           const script = await loadScript('check-layout.js');
-          return page.evaluate(script, { 
-            selector: params.selector,
-            ancestors: params.ancestors ?? 5
-          });
+          await page.evaluate(script);
+          return page.evaluate(
+            (p) => checkLayout(p),
+            { selector: params.selector, ancestors: params.ancestors ?? 5 }
+          );
         }
         
         default:
@@ -336,14 +343,39 @@ export function formatConsoleMessages(messages: BufferedConsoleMessage[], totalC
 
 这是唯一一个不走 `page.evaluate` 的 action，需要特殊分支处理。
 
+### 脚本注入方式：两步走
+
+`page.evaluate` 有两种模式：
+- **字符串模式**：`page.evaluate(jsString)` — 直接执行，但**忽略额外参数**
+- **函数模式**：`page.evaluate(fn, args)` — 序列化函数后执行，args 可传入
+
+因此不能用 `page.evaluate(script, args)`（args 会被丢弃）。正确做法是两步：
+
+```typescript
+// Step 1: 注入脚本，定义全局函数（幂等，重复调用无害）
+const script = await loadScript('find-elements.js');
+await page.evaluate(script);
+
+// Step 2: 用函数模式调用，传入参数
+return page.evaluate(
+  (p) => findElements(p),
+  { text: params.text, debug: params.debug }
+);
+```
+
 ### 脚本可独立运行
 
 JS 脚本应该：
 - 不依赖外部变量
 - 不使用 import
 - 函数签名自包含
+- 只定义一个全局函数（不自动执行）
 
 这样可以直接复制到浏览器控制台运行调试。
+
+### 语法验证
+
+提取后先用 `new Function(scriptContent)` 在 Node 端验证语法，再注入浏览器。避免注入时才发现语法错误。
 
 ### trace-css.js 的 el.matches() 安全
 
