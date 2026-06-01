@@ -6,11 +6,7 @@ The inspection tool suite got a complete rewrite — Onli 1 tool but including a
    
 ## Why?
 
-I've used Claude and OpenCode for frontend development for a long time. Their MCP integrations for Chrome — built on Playwright and the like — feel like a starship: massive, feature-bloated, 90% of which I never use. And they burn through tokens like there's no tomorrow.
-
-It frustrated me.
-
-Suddenly I found Pi. Its simplicity, elegance, restraint — so refreshing. Just 4 essential tools. That's it. That's all you need.
+I've used Claude and OpenCode for frontend development for a long time. Their MCP integrations for Chrome — built on Playwright and the like — feel like a starship: massive, feature-bloated, 90% of which I never use. And they burn through tokens like there's no tomorrow. It frustrated me.
 
 Inspired by Pi's philosophy, I built **pi-to-chrome** for myself. 6 most-used functions, combined into one tool. Minimalist. Token-efficient. Nothing more, nothing less.
 
