@@ -154,5 +154,5 @@ function checkLayout(params) {
 
   var summary = lines.join('\n');
   console.log(summary);
-  return data;
+  return { content: [{ type: 'text', text: summary }], details: data };
 }

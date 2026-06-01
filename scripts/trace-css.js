@@ -128,5 +128,5 @@ function traceCss(params) {
 
   var result = { element: elementInfo, cssRules: rules };
   console.log(result);
-  return result;
+  return { content: [{ type: 'text', text: summary }], details: { element: elementInfo, cssRules: rules } };
 }

@@ -92,8 +92,8 @@ function showDomTree(params) {
   }
 
   var tree = buildNode(root, 0, maxD);
-  var summary = formatTree(tree);
+  var summary = formatTree(tree, '', false, true);
 
   console.log(summary);
-  return tree;
+  return { content: [{ type: 'text', text: summary }], details: { tree: tree } };
 }

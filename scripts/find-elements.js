@@ -22,7 +22,7 @@ function findElements(params) {
     return errMsg;
   }
 
-  var debug = false;
+  var debug = params.debug || false;
 
   // ─── Types (inline) ───────────────────────────
   // MatchResult, MatchWithEl, FindElementResult
@@ -298,5 +298,5 @@ function findElements(params) {
 
   var summary = summaryLines.join('\n');
   console.log(summary);
-  return results;
+  return { content: [{ type: 'text', text: summary }], details: { total: results.length, results: results } };
 }
