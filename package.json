@@ -1,6 +1,6 @@
 {
   "name": "pi-to-chrome",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Only 1 tool links to Chrome — the tiniest extension you need.",
   "repository": {
     "type": "git",
