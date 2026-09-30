@@ -1,3 +1,13 @@
+## v0.3.2 Dependency declaration fix
+
+Aligns the package manifest with Pi's official package guidelines. No source code changes — zero runtime behavior difference.
+
+### Fixed
+
+- Moved `@sinclair/typebox` out of `dependencies` into `peerDependencies` with range `"*"`, plus a physical copy in `devDependencies` for local type checking
+	- Pi 0.99.0+ emits a Host-provided warning when host-supplied modules are declared in `dependencies`
+	- Install or update to 0.3.2 and Pi starts with zero warnings
+
 ## v0.3.1 Tool Consolidation — One inspect tool with multiple actions
 
 ### Breaking Change

@@ -1,6 +1,6 @@
 {
   "name": "pi-to-chrome",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Only 1 tool links to Chrome — the tiniest extension you need.",
   "repository": {
     "type": "git",
@@ -19,11 +19,11 @@
   ],
   "type": "module",
   "dependencies": {
-    "@sinclair/typebox": "^0.34.49",
     "puppeteer-core": "^24.0.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "@sinclair/typebox": "*"
   },
   "files": [
     "index.ts",
@@ -40,6 +40,7 @@
     ]
   },
   "devDependencies": {
+    "@sinclair/typebox": "^0.34.49",
     "typescript": "^6.0.3"
   }
 }
